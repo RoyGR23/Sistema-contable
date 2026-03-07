@@ -25,7 +25,7 @@ app = FastAPI(title="API Sistema Contable - Tienda de Ropa")
 
 @app.api_route("/api/v1/ping", methods=["GET", "HEAD"])
 def despertar_servidor():
-    return {"estado": "Despierto", "mensaje": "Servidor listo para recibir peticiones"}
+    return {"estado": "Despierto", "mensaje": "El servidor de contabilidad está activo y listo."}
 
 # Permisos a React
 app.add_middleware(
