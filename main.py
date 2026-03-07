@@ -34,8 +34,8 @@ app.add_middleware(
 
 # Conexión real a tu base de datos Supabase
 # En producción, estas claves deben estar en variables de entorno (.env)
-URL_SUPABASE = "https://tekdvbdqpkmdwgbbnxfa.supabase.co"
-CLAVE_SUPABASE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRla2R2YmRxcGttZHdnYmJueGZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjU4MDY2MywiZXhwIjoyMDg4MTU2NjYzfQ.Hc7dk3C2VbL6oemwXvFeY7D_e3j5u0HygBAG_NHqDO8"
+URL_SUPABASE = os.environ.get("SUPABASE_URL")
+CLAVE_SUPABASE = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(URL_SUPABASE, CLAVE_SUPABASE)
 
 class ArticuloVenta(BaseModel):
