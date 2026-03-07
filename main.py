@@ -26,7 +26,7 @@ app = FastAPI(title="API Sistema Contable - Tienda de Ropa")
 # Permisos a React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],  # Permite cualquier origen (dev + producción en Render)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
