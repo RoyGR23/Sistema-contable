@@ -1,0 +1,17 @@
+# 1. Archivos temporales de Python (Basura que hace tu PC)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. Entornos virtuales (Son pesadísimos, Render instalará el suyo propio)
+venv/
+env/
+.venv/
+
+# 3. VARIABLES SECRETAS (¡Súper importante para tu seguridad!)
+.env
+.env.*
+
+# 4. Archivos de sistema operativo (Basura de Windows o Mac)
+.DS_Store
+Thumbs.db
