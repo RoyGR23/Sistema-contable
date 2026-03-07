@@ -23,8 +23,7 @@ def verify_password(plain_password, hashed_password):
 
 app = FastAPI(title="API Sistema Contable - Tienda de Ropa")
 
-@app.head("/api/v1/ping")
-@app.get("/api/v1/ping")
+@app.api_route("/api/v1/ping", methods=["GET", "HEAD"])
 def despertar_servidor():
     return {"estado": "Despierto", "mensaje": "Servidor listo para recibir peticiones"}
 
