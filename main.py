@@ -425,13 +425,13 @@ def exportar_cuentas_cobrar_pdf(
     monto_max: Optional[float] = None
 ):
     try:
-        # Obtener todas las cuentas (o usar la DB para filtrar, pero lo haremos en memoria para simular el frontend actual)
-        respuesta = supabase.table("cuentas_cobrar").select("*, facturas(ncf)").order("creado_en", desc=True).execute()
+        # Obtener todas las cuentas incluyendo cliente
+        respuesta = supabase.table("cuentas_cobrar").select("*, facturas(ncf), clientes(nombre, rnc_cedula)").order("creado_en", desc=True).execute()
         cuentas = []
         for c in (respuesta.data or []):
             try:
-                cli_resp = supabase.table("clientes").select("nombre, rnc_cedula").eq("id", c["cliente_id"]).execute()
-                cliente_data = cli_resp.data[0] if cli_resp.data else {"nombre": "Desconocido", "rnc_cedula": ""}
+                # El join nos trae la información del cliente
+                cliente_data = c.get("clientes") or {"nombre": "Desconocido", "rnc_cedula": ""}
             except:
                 cliente_data = {"nombre": "Desconocido", "rnc_cedula": ""}
             
@@ -466,6 +466,16 @@ def exportar_cuentas_cobrar_pdf(
 
         total_saldo = sum(c["saldo_pendiente"] for c in filtradas)
         
+        # Formatear fechas a DD/MM/YYYY
+        for f in filtradas:
+            if f["fecha_vencimiento"]:
+                try:
+                    f["fecha_vencimiento_str"] = datetime.strptime(f["fecha_vencimiento"], "%Y-%m-%d").strftime("%d/%m/%Y")
+                except:
+                    f["fecha_vencimiento_str"] = f["fecha_vencimiento"]
+            else:
+                f["fecha_vencimiento_str"] = "—"
+                
         # Generar HTML con Jinja2
         html_template = """
         <!DOCTYPE html>
@@ -474,20 +484,20 @@ def exportar_cuentas_cobrar_pdf(
             <meta charset="UTF-8">
             <title>Reporte de Cuentas por Cobrar</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 20px; color: #2c3e50; }
-                h1 { font-size: 24px; margin-bottom: 5px; }
-                .subtitle { font-size: 12px; color: #7f8c8d; margin-bottom: 20px; }
-                .filters { font-size: 12px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; }
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-                th { background-color: #2c3e50; color: white; text-align: left; padding: 8px; }
-                td { padding: 8px; border-bottom: 1px solid #e9ecef; }
+                body { font-family: Arial, sans-serif; margin: 15px; color: #2c3e50; }
+                h1 { font-size: 20px; margin-bottom: 5px; }
+                .subtitle { font-size: 11px; color: #7f8c8d; margin-bottom: 15px; }
+                .filters { font-size: 11px; margin-bottom: 15px; padding: 8px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
+                th { background-color: #2c3e50; color: white; padding: 6px; text-align: center; }
+                td { padding: 6px; border-bottom: 1px solid #e9ecef; }
                 tr:nth-child(even) { background-color: #f8f9fa; }
+                /* Alineaciones específicas para el contenido */
+                .center { text-align: center; }
                 .right { text-align: right; }
+                .left { text-align: left; }
                 .total-row { font-weight: bold; background-color: #ecf0f1 !important; color: #2c3e50; }
-                .estado-Pendiente { color: #fd7e14; font-weight: bold; }
-                .estado-Pagado { color: #198754; font-weight: bold; }
-                .estado-Atrasado { color: #dc3545; font-weight: bold; }
-                .estado-Anulado { color: #6c757d; font-weight: bold; }
+                /* Se han eliminado los colores de estado */
             </style>
         </head>
         <body>
@@ -501,25 +511,25 @@ def exportar_cuentas_cobrar_pdf(
             <table>
                 <thead>
                     <tr>
-                        <th>NCF</th>
-                        <th>Cliente</th>
-                        <th>RNC/Cédula</th>
-                        <th class="right">Monto Original</th>
-                        <th class="right">Saldo Pendiente</th>
-                        <th>Vencimiento</th>
-                        <th>Estado</th>
+                        <th style="width: 14%;">NCF</th>
+                        <th style="width: 20%;">Cliente</th>
+                        <th style="width: 12%;">RNC/Cédula</th>
+                        <th style="width: 16%;">Monto Facturado</th>
+                        <th style="width: 16%;">Saldo Pendiente</th>
+                        <th style="width: 12%;">Vencimiento</th>
+                        <th style="width: 10%;">Estado</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for c in cuentas %}
                     <tr>
-                        <td>{{ c.ncf }}</td>
-                        <td>{{ c.nombre_cliente }}</td>
-                        <td>{{ c.rnc_cedula }}</td>
+                        <td class="left">{{ c.ncf }}</td>
+                        <td class="center">{{ c.nombre_cliente }}</td>
+                        <td class="left">{{ c.rnc_cedula }}</td>
                         <td class="right">RD$ {{ "{:,.2f}".format(c.monto_inicial) }}</td>
                         <td class="right">RD$ {{ "{:,.2f}".format(c.saldo_pendiente) }}</td>
-                        <td>{{ c.fecha_vencimiento if c.fecha_vencimiento else '—' }}</td>
-                        <td class="estado-{{ c.estado }}">{{ c.estado }}</td>
+                        <td class="center">{{ c.fecha_vencimiento_str }}</td>
+                        <td class="center">{{ c.estado }}</td>
                     </tr>
                     {% endfor %}
                     <tr class="total-row">
