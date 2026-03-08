@@ -278,12 +278,10 @@ def obtener_transacciones():
 @app.get("/api/v1/ingresos")
 def obtener_ingresos():
     """
-    Obtiene todas las ventas al contado (Ingresos directos) con sus detalles.
+    Obtiene TODAS las facturas (Contado y Crédito) para el módulo de Ingresos.
     """
     try:
-        # Obtenemos facturas que NO sean a crédito
-        # Y traemos información del cliente para la tabla
-        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").neq("es_credito", True).order("fecha_emision", desc=True).execute()
+        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").order("fecha_emision", desc=True).execute()
         
         ingresos_listos = []
         for f in respuesta.data:
@@ -303,6 +301,9 @@ def obtener_ingresos():
             if not rnc_cedula:
                 rnc_cedula = "—"
 
+            es_credito = f.get("es_credito")
+            tipo_venta = "Crédito" if es_credito else "Contado"
+
             ingresos_listos.append({
                 "id": f.get("id"),
                 "fecha": f.get("fecha_emision"),
@@ -312,7 +313,8 @@ def obtener_ingresos():
                 "subtotal": f.get("subtotal", 0),
                 "total_itbis": f.get("total_itbis", 0),
                 "total_pagar": f.get("total_pagar", 0),
-                "metodo_pago": f.get("metodo_pago", "No especificado")
+                "metodo_pago": f.get("metodo_pago", "No especificado"),
+                "tipo_venta": tipo_venta
             })
 
         return {"estado": "Exito", "datos": ingresos_listos}
