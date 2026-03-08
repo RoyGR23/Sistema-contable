@@ -818,8 +818,8 @@ def obtener_todos_permisos():
 def obtener_permisos_rol(rol_id: str):
     try:
         # Se obtiene la lista de permisos para este rol
-        respuesta = supabase.table("rol_permisos").select("permisos_id").eq("rol_id", rol_id).execute()
-        permisos_ids = [p["permisos_id"] for p in respuesta.data] if respuesta.data else []
+        respuesta = supabase.table("rol_permisos").select("permiso_id").eq("rol_id", rol_id).execute()
+        permisos_ids = [p["permiso_id"] for p in respuesta.data] if respuesta.data else []
         return {"estado": "Exito", "datos": permisos_ids}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -835,7 +835,7 @@ def actualizar_permisos_rol(rol_id: str, datos: PermisoActualizacion):
         
         # Insertar los nuevos
         if datos.permisos_ids:
-            nuevos = [{"rol_id": rol_id, "permisos_id": pid} for pid in datos.permisos_ids]
+            nuevos = [{"rol_id": rol_id, "permiso_id": pid} for pid in datos.permisos_ids]
             supabase.table("rol_permisos").insert(nuevos).execute()
                 
         return {"estado": "Exito", "mensaje": "Permisos actualizados correctamente"}
