@@ -10,8 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import hashlib
 from passlib.context import CryptContext
 import uuid
-import pdfkit
+from xhtml2pdf import pisa
 from jinja2 import Template
+import io
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -549,11 +550,14 @@ def exportar_cuentas_cobrar_pdf(
             filtros_text=filtros_text
         )
 
-        # Configurar la ruta de wkhtmltopdf
-        path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-        config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+        # Generar PDF con xhtml2pdf
+        pdf_buffer = io.BytesIO()
+        pisa_status = pisa.CreatePDF(html_content, dest=pdf_buffer)
         
-        pdf_bytes = pdfkit.from_string(html_content, False, configuration=config, options={"enable-local-file-access": ""})
+        if pisa_status.err:
+            raise HTTPException(status_code=500, detail="Error al generar el documento PDF")
+            
+        pdf_bytes = pdf_buffer.getvalue()
         
         return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=reporte_cxc.pdf"})
 
