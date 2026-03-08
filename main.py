@@ -494,7 +494,7 @@ def exportar_cuentas_cobrar_pdf(
                 tr:nth-child(even) { background-color: #f8f9fa; }
                 /* Alineaciones específicas para el contenido */
                 .center { text-align: center; }
-                .right { text-align: right; }
+                .right { text-align: right; white-space: nowrap; }
                 .left { text-align: left; }
                 .total-row { font-weight: bold; background-color: #ecf0f1 !important; color: #2c3e50; }
                 /* Se han eliminado los colores de estado */
@@ -511,13 +511,13 @@ def exportar_cuentas_cobrar_pdf(
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 14%;">NCF</th>
+                        <th style="width: 13%;">NCF</th>
                         <th style="width: 20%;">Cliente</th>
-                        <th style="width: 12%;">RNC/Cédula</th>
-                        <th style="width: 16%;">Monto Facturado</th>
-                        <th style="width: 16%;">Saldo Pendiente</th>
-                        <th style="width: 12%;">Vencimiento</th>
-                        <th style="width: 10%;">Estado</th>
+                        <th style="width: 11%;">RNC/Cédula</th>
+                        <th style="width: 19%;">Monto Facturado</th>
+                        <th style="width: 19%;">Saldo Pendiente</th>
+                        <th style="width: 9%;">Vencimiento</th>
+                        <th style="width: 9%;">Estado</th>
                     </tr>
                 </thead>
                 <tbody>
