@@ -274,6 +274,51 @@ def obtener_transacciones():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al cargar transacciones: {str(e)}")
 
+# --- ENDPOINTS DE INGRESOS ---
+@app.get("/api/v1/ingresos")
+def obtener_ingresos():
+    """
+    Obtiene todas las ventas al contado (Ingresos directos) con sus detalles.
+    """
+    try:
+        # Obtenemos facturas que NO sean a crédito
+        # Y traemos información del cliente para la tabla
+        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").eq("es_credito", False).order("fecha_emision", desc=True).execute()
+        
+        ingresos_listos = []
+        for f in respuesta.data:
+            cliente_info = f.get("clientes")
+            
+            nombre_factura = f.get("nombre_cliente")
+            if nombre_factura:
+                nombre_cliente = nombre_factura
+            elif cliente_info and cliente_info.get("nombre_cliente"):
+                nombre_cliente = cliente_info.get("nombre_cliente")
+            else:
+                nombre_cliente = "No especificado"
+                
+            rnc_cedula = f.get("rnc_cliente")
+            if not rnc_cedula and cliente_info and cliente_info.get("rnc_cedula"):
+                rnc_cedula = cliente_info.get("rnc_cedula")
+            if not rnc_cedula:
+                rnc_cedula = "—"
+
+            ingresos_listos.append({
+                "id": f.get("id"),
+                "fecha": f.get("fecha_emision"),
+                "ncf": f.get("ncf") or "—",
+                "rnc_cliente": rnc_cedula,
+                "nombre_cliente": nombre_cliente,
+                "subtotal": f.get("subtotal", 0),
+                "total_itbis": f.get("total_itbis", 0),
+                "total_pagar": f.get("total_pagar", 0),
+                "metodo_pago": f.get("metodo_pago", "No especificado")
+            })
+
+        return {"estado": "Exito", "datos": ingresos_listos}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al cargar ingresos: {str(e)}")
+
 @app.get("/api/v1/dashboard/ventas-mes")
 def obtener_ventas_mes():
     try:
@@ -1119,7 +1164,8 @@ def seed_permisos_cuentas():
         {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_exportar_pdf", "descripcion": "Permite generar y descargar el estado de cuenta de un cliente en formato PDF"},
         {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_ver", "descripcion": "Permite acceder y visualizar la lista general de cuentas por cobrar"},
         {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_seleccionar", "descripcion": "Permite ver los detalles, facturas pendientes y el historial de una cuenta específica"},
-        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_abonar", "descripcion": "Permite registrar un pago o abono para reducir la deuda de un cliente"}
+        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_abonar", "descripcion": "Permite registrar un pago o abono para reducir la deuda de un cliente"},
+        {"modulo": "ingresos", "codigo": "ingresos_ver", "descripcion": "Permite visualizar el módulo de ingresos y las ventas al contado"}
     ]
     try:
         insertados = []
