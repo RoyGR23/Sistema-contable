@@ -283,7 +283,7 @@ def obtener_ingresos():
     try:
         # Obtenemos facturas que NO sean a crédito
         # Y traemos información del cliente para la tabla
-        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").eq("es_credito", False).order("fecha_emision", desc=True).execute()
+        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").neq("es_credito", True).order("fecha_emision", desc=True).execute()
         
         ingresos_listos = []
         for f in respuesta.data:
