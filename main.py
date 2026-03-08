@@ -1113,6 +1113,25 @@ def obtener_todos_permisos():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/seed-permisos-cuentas")
+def seed_permisos_cuentas():
+    permisos = [
+        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_exportar_pdf", "descripcion": "Permite generar y descargar el estado de cuenta de un cliente en formato PDF"},
+        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_ver", "descripcion": "Permite acceder y visualizar la lista general de cuentas por cobrar"},
+        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_seleccionar", "descripcion": "Permite ver los detalles, facturas pendientes y el historial de una cuenta específica"},
+        {"modulo": "cuentas_cobrar", "codigo": "cuentas_cobrar_abonar", "descripcion": "Permite registrar un pago o abono para reducir la deuda de un cliente"}
+    ]
+    try:
+        insertados = []
+        for p in permisos:
+            ext = supabase.table("permisos").select("id").eq("codigo", p["codigo"]).execute()
+            if not ext.data:
+                supabase.table("permisos").insert(p).execute()
+                insertados.append(p["codigo"])
+        return {"estado": "Exito", "insertados": insertados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/roles/{rol_id}/permisos")
 def obtener_permisos_rol(rol_id: str):
     try:
