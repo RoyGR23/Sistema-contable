@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 import hashlib
 from passlib.context import CryptContext
+import uuid
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -880,6 +881,10 @@ def login_usuario(login_data: LoginRequest):
                 elif per and isinstance(per, list) and len(per) > 0 and per[0].get("codigo"):
                     permisos_acciones.append(per[0].get("codigo"))
         
+        # Generar un token único para esta sesión e invalidar cualquier sesión anterior
+        nuevo_token = str(uuid.uuid4())
+        supabase.table("usuarios").update({"session_token": nuevo_token}).eq("id", usuario.get("id")).execute()
+
         return {
             "estado": "Exito", 
             "datos": {
@@ -887,10 +892,37 @@ def login_usuario(login_data: LoginRequest):
                 "nombre_completo": usuario.get("nombre_completo"),
                 "email": usuario.get("email"),
                 "rol": nombre_rol,
-                "permisos_acciones": permisos_acciones
+                "permisos_acciones": permisos_acciones,
+                "session_token": nuevo_token
             }
         }
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+# Validacion de sesion activa
+class CheckSessionRequest(BaseModel):
+    usuario_id: str
+    session_token: str
+
+@app.post("/api/v1/auth/check-session")
+def verificar_sesion(datos: CheckSessionRequest):
+    try:
+        respuesta = supabase.table("usuarios").select("session_token, activo").eq("id", datos.usuario_id).execute()
+        if not respuesta.data:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        db_user = respuesta.data[0]
+        
+        if not db_user.get("activo"):
+            return {"valida": False, "razon": "cuenta_desactivada"}
+        
+        if db_user.get("session_token") != datos.session_token:
+            return {"valida": False, "razon": "sesion_desplazada"}
+        
+        return {"valida": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
