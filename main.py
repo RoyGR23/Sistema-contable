@@ -317,31 +317,42 @@ def obtener_catalogo():
     """
     Busca toda la ropa disponible en la base de datos y la prepara
     para que React pueda mostrarla como botones en la caja registradora.
+    Incluye el stock actual de cada variante.
     """
     try:
-        # Supabase nos permite hacer un "Join" facilísimo. 
-        # Buscamos las variantes y le pedimos que traiga los datos de la tabla 'productos'
+        # Traer variantes con datos del producto padre
         respuesta = supabase.table("variantes_producto").select(
             "id, talla, color, precio_modificado, productos(nombre, precio_base)"
         ).execute()
-        
+
+        # Traer stock de inventario para todas las variantes
+        inv_resp = supabase.table("inventario").select("variante_id, cantidad_disponible").execute()
+        # Crear mapa variante_id -> cantidad_disponible
+        stock_map = {}
+        for inv in (inv_resp.data or []):
+            vid = inv.get("variante_id")
+            if vid:
+                # Sumar si hay varios registros por variante
+                stock_map[vid] = stock_map.get(vid, 0) + (inv.get("cantidad_disponible") or 0)
+
         catalogo_listo = []
-        
+
         for item in respuesta.data:
             producto_padre = item['productos']
-            # Si la talla XL es más cara usa ese precio, si no, usa el precio normal
             precio_final = item['precio_modificado'] if item['precio_modificado'] else producto_padre['precio_base']
-            
+            variante_id = item['id']
+
             catalogo_listo.append({
-                "variante_id": item['id'],
+                "variante_id": variante_id,
                 "nombre_mostrar": f"{producto_padre['nombre']} - Talla {item['talla']} ({item['color']})",
-                "precio": precio_final
+                "precio": precio_final,
+                "stock": stock_map.get(variante_id, 0)
             })
-            
+
         return {"estado": "Exito", "datos": catalogo_listo}
-        
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al leer el catálogo: {str(e)}")  
+        raise HTTPException(status_code=500, detail=f"Error al leer el catálogo: {str(e)}")
         
 # --- ENDPOINTS DE CLIENTES ---
 
