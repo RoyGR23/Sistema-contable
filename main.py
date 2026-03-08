@@ -1,5 +1,5 @@
 # main.py actualizado
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from decimal import Decimal
@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import hashlib
 from passlib.context import CryptContext
 import uuid
+import pdfkit
+from jinja2 import Template
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -411,6 +413,153 @@ def actualizar_estado_cuenta(id: str, datos: CuentaCobrarEstado):
         raise HTTPException(status_code=400, detail=str(e))
 
 # Abonos de Cuentas por Cobrar
+
+@app.get("/api/v1/cuentas-cobrar/exportar-pdf")
+def exportar_cuentas_cobrar_pdf(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    estado: Optional[str] = None,
+    cliente: Optional[str] = None,
+    monto_min: Optional[float] = None,
+    monto_max: Optional[float] = None
+):
+    try:
+        # Obtener todas las cuentas (o usar la DB para filtrar, pero lo haremos en memoria para simular el frontend actual)
+        respuesta = supabase.table("cuentas_cobrar").select("*, facturas(ncf)").order("creado_en", desc=True).execute()
+        cuentas = []
+        for c in (respuesta.data or []):
+            try:
+                cli_resp = supabase.table("clientes").select("nombre, rnc_cedula").eq("id", c["cliente_id"]).execute()
+                cliente_data = cli_resp.data[0] if cli_resp.data else {"nombre": "Desconocido", "rnc_cedula": ""}
+            except:
+                cliente_data = {"nombre": "Desconocido", "rnc_cedula": ""}
+            
+            ncf = "—"
+            if c.get("facturas") and isinstance(c["facturas"], dict):
+                ncf = c["facturas"].get("ncf") or "—"
+            elif c.get("facturas") and isinstance(c["facturas"], list) and len(c["facturas"]) > 0:
+                ncf = c["facturas"][0].get("ncf") or "—"
+                
+            cuentas.append({
+                "creado_en": c.get("creado_en", ""),
+                "ncf": ncf,
+                "nombre_cliente": cliente_data["nombre"],
+                "rnc_cedula": cliente_data["rnc_cedula"] or "—",
+                "monto_inicial": float(c.get("monto_inicial", 0)),
+                "saldo_pendiente": float(c.get("saldo_pendiente", 0)),
+                "fecha_vencimiento": c.get("fecha_vencimiento"),
+                "estado": c.get("estado", "Pendiente")
+            })
+            
+        # Filtrar
+        filtradas = []
+        for c in cuentas:
+            if estado and estado != 'Todos' and c["estado"] != estado: continue
+            if cliente and cliente.lower() not in c["nombre_cliente"].lower(): continue
+            if monto_min is not None and c["saldo_pendiente"] < monto_min: continue
+            if monto_max is not None and c["saldo_pendiente"] > monto_max: continue
+            c_date = c["creado_en"].split('T')[0] if c["creado_en"] else ""
+            if fecha_desde and c_date and c_date < fecha_desde: continue
+            if fecha_hasta and c_date and c_date > fecha_hasta: continue
+            filtradas.append(c)
+
+        total_saldo = sum(c["saldo_pendiente"] for c in filtradas)
+        
+        # Generar HTML con Jinja2
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Cuentas por Cobrar</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; color: #2c3e50; }
+                h1 { font-size: 24px; margin-bottom: 5px; }
+                .subtitle { font-size: 12px; color: #7f8c8d; margin-bottom: 20px; }
+                .filters { font-size: 12px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 5px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+                th { background-color: #2c3e50; color: white; text-align: left; padding: 8px; }
+                td { padding: 8px; border-bottom: 1px solid #e9ecef; }
+                tr:nth-child(even) { background-color: #f8f9fa; }
+                .right { text-align: right; }
+                .total-row { font-weight: bold; background-color: #ecf0f1 !important; color: #2c3e50; }
+                .estado-Pendiente { color: #fd7e14; font-weight: bold; }
+                .estado-Pagado { color: #198754; font-weight: bold; }
+                .estado-Atrasado { color: #dc3545; font-weight: bold; }
+                .estado-Anulado { color: #6c757d; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <h1>Reporte de Cuentas por Cobrar</h1>
+            <div class="subtitle">Generado: {{ fecha_generacion }}</div>
+            
+            {% if filtros_text %}
+            <div class="filters"><strong>Filtros aplicados:</strong> {{ filtros_text }}</div>
+            {% endif %}
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>NCF</th>
+                        <th>Cliente</th>
+                        <th>RNC/Cédula</th>
+                        <th class="right">Monto Original</th>
+                        <th class="right">Saldo Pendiente</th>
+                        <th>Vencimiento</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in cuentas %}
+                    <tr>
+                        <td>{{ c.ncf }}</td>
+                        <td>{{ c.nombre_cliente }}</td>
+                        <td>{{ c.rnc_cedula }}</td>
+                        <td class="right">RD$ {{ "{:,.2f}".format(c.monto_inicial) }}</td>
+                        <td class="right">RD$ {{ "{:,.2f}".format(c.saldo_pendiente) }}</td>
+                        <td>{{ c.fecha_vencimiento if c.fecha_vencimiento else '—' }}</td>
+                        <td class="estado-{{ c.estado }}">{{ c.estado }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td colspan="4" class="right">TOTAL PENDIENTE:</td>
+                        <td class="right">RD$ {{ "{:,.2f}".format(total_saldo) }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>
+        """
+        
+        filtros_aplicados = []
+        if estado and estado != 'Todos': filtros_aplicados.append(f"Estado: {estado}")
+        if cliente: filtros_aplicados.append(f"Cliente: {cliente}")
+        if fecha_desde: filtros_aplicados.append(f"Desde: {fecha_desde}")
+        if fecha_hasta: filtros_aplicados.append(f"Hasta: {fecha_hasta}")
+        if monto_min is not None: filtros_aplicados.append(f"Monto min: RD$ {monto_min}")
+        if monto_max is not None: filtros_aplicados.append(f"Monto max: RD$ {monto_max}")
+        filtros_text = " | ".join(filtros_aplicados)
+
+        template = Template(html_template)
+        html_content = template.render(
+            cuentas=filtradas,
+            total_saldo=total_saldo,
+            fecha_generacion=datetime.now().strftime("%d/%m/%Y %I:%M %p"),
+            filtros_text=filtros_text
+        )
+
+        # Configurar la ruta de wkhtmltopdf
+        path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+        config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+        
+        pdf_bytes = pdfkit.from_string(html_content, False, configuration=config, options={"enable-local-file-access": ""})
+        
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=reporte_cxc.pdf"})
+
+    except Exception as e:
+        print("Error PDF:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/cuentas-cobrar/{cuenta_id}/abonos")
 def obtener_abonos(cuenta_id: str):
