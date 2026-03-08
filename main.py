@@ -48,6 +48,7 @@ class ArticuloVenta(BaseModel):
     precio_unitario: float # Usamos float en la petición para facilitar JSON, lo pasamos a Decimal en la lógica
 
 class PeticionFactura(BaseModel):
+    cliente_id: Optional[str] = None
     rnc_cliente: Optional[str] = None
     nombre_cliente: Optional[str] = None
     tipo_comprobante: str
@@ -55,6 +56,8 @@ class PeticionFactura(BaseModel):
     articulos: List[ArticuloVenta]
     descuento_id: Optional[str] = None
     descuento: Optional[float] = 0.0
+    tipo_venta: str = "Contado"
+    aplicar_itbis: bool = True
 
 class ClienteBase(BaseModel):
     rnc_cedula: str
@@ -146,9 +149,10 @@ def procesar_venta(factura: PeticionFactura):
     if factura.tipo_comprobante == "B01" and not factura.rnc_cliente:
         raise HTTPException(status_code=400, detail="RNC obligatorio para Crédito Fiscal.")
 
+    # ITBIS y Totales
     subtotal = sum(art.cantidad * art.precio_unitario for art in factura.articulos)
-    total_itbis = subtotal * 0.18
-    total_pagar = subtotal + total_itbis
+    total_itbis = subtotal * 0.18 if factura.aplicar_itbis else 0.0
+    total_pagar = subtotal + total_itbis - factura.descuento
 
     try:
         # 2. Obtener y actualizar el NCF en Supabase
@@ -187,7 +191,7 @@ def procesar_venta(factura: PeticionFactura):
                 "variante_id": articulo.variante_id,
                 "cantidad": articulo.cantidad,
                 "precio_unitario": articulo.precio_unitario,
-                "monto_itbis": articulo.precio_unitario * articulo.cantidad * 0.18
+                "monto_itbis": (articulo.precio_unitario * articulo.cantidad * 0.18) if factura.aplicar_itbis else 0.0
             }).execute()
 
             # Descontar el inventario
@@ -199,11 +203,29 @@ def procesar_venta(factura: PeticionFactura):
             # Actualizamos la nueva cantidad
             supabase.table("inventario").update({"cantidad_disponible": nueva_cantidad}).eq("variante_id", articulo.variante_id).execute()
 
+        # 5. Si es Venta a Crédito, insertar en cuentas_por_cobrar
+        if factura.tipo_venta == "Credito":
+            if not factura.cliente_id:
+                raise HTTPException(status_code=400, detail="El cliente es obligatorio para ventas a crédito.")
+            
+            import datetime
+            fecha_venc = datetime.date.today() + datetime.timedelta(days=30)
+            
+            supabase.table("cuentas_por_cobrar").insert({
+                "factura_id": factura_id,
+                "cliente_id": factura.cliente_id,
+                "monto_inicial": total_pagar,
+                "saldo_pendiente": total_pagar,
+                "fecha_vencimiento": fecha_venc.isoformat(),
+                "estado": "Pendiente"
+            }).execute()
+
+        # 6. Responder
         return {
             "estado": "Exito",
-            "mensaje": "Venta completada",
-            "ncf": ncf_generado,
-            "total_cobrado": total_pagar
+            "mensaje": "Venta procesada con éxito",
+            "factura": datos_nueva_factura,
+            "factura_id": factura_id
         }
 
     except Exception as e:
@@ -762,10 +784,10 @@ def cambiar_estado_usuario(id: str, activo: bool):
         raise HTTPException(status_code=400, detail=str(e))
 
 # Modulos y Permisos
-@app.get("/api/v1/modulos")
-def obtener_modulos():
+@app.get("/api/v1/permisos")
+def obtener_todos_permisos():
     try:
-        respuesta = supabase.table("modulos").select("*").execute()
+        respuesta = supabase.table("permisos").select("*").execute()
         return {"estado": "Exito", "datos": respuesta.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -773,24 +795,26 @@ def obtener_modulos():
 @app.get("/api/v1/roles/{rol_id}/permisos")
 def obtener_permisos_rol(rol_id: str):
     try:
-        # Se obtiene la lista de todos los modulos con sus permisos para este rol
-        respuesta = supabase.table("permisos_rol").select("*, modulos(nombre, codigo_interno)").eq("rol_id", rol_id).execute()
-        return {"estado": "Exito", "datos": respuesta.data}
+        # Se obtiene la lista de permisos para este rol
+        respuesta = supabase.table("rol_permisos").select("permisos_id").eq("rol_id", rol_id).execute()
+        permisos_ids = [p["permisos_id"] for p in respuesta.data] if respuesta.data else []
+        return {"estado": "Exito", "datos": permisos_ids}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class PermisoActualizacion(BaseModel):
+    permisos_ids: List[str]
+
 @app.put("/api/v1/roles/{rol_id}/permisos")
-def actualizar_permisos_rol(rol_id: str, permisos: List[PermisoRolBase]):
+def actualizar_permisos_rol(rol_id: str, datos: PermisoActualizacion):
     try:
-        for p in permisos:
-            datos = p.dict()
-            datos["rol_id"] = rol_id
-            
-            existe = supabase.table("permisos_rol").select("id").eq("rol_id", rol_id).eq("modulo_id", p.modulo_id).execute()
-            if existe.data:
-                supabase.table("permisos_rol").update(datos).eq("id", existe.data[0]["id"]).execute()
-            else:
-                supabase.table("permisos_rol").insert(datos).execute()
+        # Primero borrar los existentes para este rol
+        supabase.table("rol_permisos").delete().eq("rol_id", rol_id).execute()
+        
+        # Insertar los nuevos
+        if datos.permisos_ids:
+            nuevos = [{"rol_id": rol_id, "permisos_id": pid} for pid in datos.permisos_ids]
+            supabase.table("rol_permisos").insert(nuevos).execute()
                 
         return {"estado": "Exito", "mensaje": "Permisos actualizados correctamente"}
     except Exception as e:
@@ -821,19 +845,18 @@ def login_usuario(login_data: LoginRequest):
         nombre_rol = rol_info.get("nombre") if rol_info else "Sin Rol"
         rol_id = usuario.get("rol_id")
         
-        # Opcional: Obtener los permisos del usuario para inyectarlos en la respuesta del Login
-        permisos_respuesta = supabase.table("permisos_rol").select("*, modulos(codigo_interno)").eq("rol_id", rol_id).execute()
-        permisos_formateados = {}
-        for p in permisos_respuesta.data:
-            mod = p.get("modulos")
-            if mod:
-                codigo = mod.get("codigo_interno")
-                permisos_formateados[codigo] = {
-                    "puede_ver": p.get("puede_ver"),
-                    "puede_crear": p.get("puede_crear"),
-                    "puede_editar": p.get("puede_editar"),
-                    "puede_eliminar": p.get("puede_eliminar")
-                }
+        # Obtener los permisos del usuario para inyectarlos en la respuesta del Login
+        permisos_respuesta = supabase.table("rol_permisos").select("permisos(codigo)").eq("rol_id", rol_id).execute()
+        
+        permisos_acciones = []
+        if permisos_respuesta.data:
+            for p in permisos_respuesta.data:
+                per = p.get("permisos")
+                if per and isinstance(per, dict) and per.get("codigo"):
+                    permisos_acciones.append(per.get("codigo"))
+                # If Supabase returns a list instead because of 1:M implicitly:
+                elif per and isinstance(per, list) and len(per) > 0 and per[0].get("codigo"):
+                    permisos_acciones.append(per[0].get("codigo"))
         
         return {
             "estado": "Exito", 
@@ -842,7 +865,7 @@ def login_usuario(login_data: LoginRequest):
                 "nombre_completo": usuario.get("nombre_completo"),
                 "email": usuario.get("email"),
                 "rol": nombre_rol,
-                "permisos": permisos_formateados
+                "permisos_acciones": permisos_acciones
             }
         }
     except HTTPException:
