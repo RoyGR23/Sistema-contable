@@ -544,6 +544,28 @@ def actualizar_inventario_completo(inventario_id: str, datos: InventarioUpdate):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error actualizando inventario: {str(e)}")
 
+@app.delete("/api/v1/inventario/{inventario_id}")
+def eliminar_inventario(inventario_id: str):
+    try:
+        # Buscamos la variante para borrarla en cascada si es posible
+        res_inv = supabase.table("inventario").select("variante_id").eq("id", inventario_id).execute()
+        if not res_inv.data:
+             raise HTTPException(status_code=404, detail="Inventario no encontrado")
+        
+        variante_id = res_inv.data[0]["variante_id"]
+        
+        respuesta = supabase.table("inventario").delete().eq("id", inventario_id).execute()
+        
+        # Opcional intentando borrar la variante. Si la DB tiene CASCADE esto puede no hacer falta.
+        try:
+             supabase.table("variantes_producto").delete().eq("id", variante_id).execute()
+        except Exception:
+             pass # Si no se puede por dependencias previas, obviamos
+             
+        return {"estado": "Exito", "mensaje": "Inventario eliminado permanentemente"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # --- ENDPOINTS DE CATEGORÍAS (MANTENIMIENTO) ---
 
 @app.get("/api/v1/categorias/prendas")
