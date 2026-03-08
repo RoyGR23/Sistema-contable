@@ -426,14 +426,14 @@ def exportar_cuentas_cobrar_pdf(
 ):
     try:
         # Obtener todas las cuentas incluyendo cliente
-        respuesta = supabase.table("cuentas_cobrar").select("*, facturas(ncf), clientes(nombre, rnc_cedula)").order("creado_en", desc=True).execute()
+        respuesta = supabase.table("cuentas_cobrar").select("*, facturas(ncf), clientes(nombre_cliente, rnc_cedula)").order("creado_en", desc=True).execute()
         cuentas = []
         for c in (respuesta.data or []):
             try:
                 # El join nos trae la información del cliente
-                cliente_data = c.get("clientes") or {"nombre": "Desconocido", "rnc_cedula": ""}
+                cliente_data = c.get("clientes") or {"nombre_cliente": "Desconocido", "rnc_cedula": ""}
             except:
-                cliente_data = {"nombre": "Desconocido", "rnc_cedula": ""}
+                cliente_data = {"nombre_cliente": "Desconocido", "rnc_cedula": ""}
             
             ncf = "—"
             if c.get("facturas") and isinstance(c["facturas"], dict):
@@ -444,7 +444,7 @@ def exportar_cuentas_cobrar_pdf(
             cuentas.append({
                 "creado_en": c.get("creado_en", ""),
                 "ncf": ncf,
-                "nombre_cliente": cliente_data["nombre"],
+                "nombre_cliente": cliente_data["nombre_cliente"],
                 "rnc_cedula": cliente_data["rnc_cedula"] or "—",
                 "monto_inicial": float(c.get("monto_inicial", 0)),
                 "saldo_pendiente": float(c.get("saldo_pendiente", 0)),
