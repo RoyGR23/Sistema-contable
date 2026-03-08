@@ -179,7 +179,8 @@ def procesar_venta(factura: PeticionFactura):
             "descuento": factura.descuento,
             "total_itbis": total_itbis,
             "total_pagar": total_pagar,
-            "metodo_pago": factura.metodo_pago
+            "metodo_pago": factura.metodo_pago,
+            "es_credito": factura.tipo_venta == "Credito"
         }
         res_factura = supabase.table("facturas").insert(datos_nueva_factura).execute()
         factura_id = res_factura.data[0]['id']
@@ -204,7 +205,7 @@ def procesar_venta(factura: PeticionFactura):
             # Actualizamos la nueva cantidad
             supabase.table("inventario").update({"cantidad_disponible": nueva_cantidad}).eq("variante_id", articulo.variante_id).execute()
 
-        # 5. Si es Venta a Crédito, insertar en cuentas_por_cobrar
+        # 5. Si es Venta a Crédito, insertar en cuentas_cobrar
         if factura.tipo_venta == "Credito":
             if not factura.cliente_id:
                 raise HTTPException(status_code=400, detail="El cliente es obligatorio para ventas a crédito.")
@@ -212,7 +213,7 @@ def procesar_venta(factura: PeticionFactura):
             import datetime
             fecha_venc = datetime.date.today() + datetime.timedelta(days=30)
             
-            supabase.table("cuentas_por_cobrar").insert({
+            supabase.table("cuentas_cobrar").insert({
                 "factura_id": factura_id,
                 "cliente_id": factura.cliente_id,
                 "monto_inicial": total_pagar,
@@ -353,7 +354,62 @@ def obtener_catalogo():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al leer el catálogo: {str(e)}")
-        
+
+# --- ENDPOINTS DE CUENTAS POR COBRAR ---
+
+@app.get("/api/v1/cuentas-cobrar")
+def obtener_cuentas_cobrar():
+    try:
+        respuesta = supabase.table("cuentas_cobrar").select(
+            "*, clientes(nombre_cliente, rnc_cedula), facturas(ncf)"
+        ).order("creado_en", desc=True).execute()
+
+        datos_listos = []
+        for c in respuesta.data:
+            cliente_info = c.get("clientes") or {}
+            factura_info = c.get("facturas") or {}
+            datos_listos.append({
+                "id": c.get("id"),
+                "creado_en": c.get("creado_en"),
+                "factura_id": c.get("factura_id"),
+                "ncf": factura_info.get("ncf", "—"),
+                "cliente_id": c.get("cliente_id"),
+                "nombre_cliente": cliente_info.get("nombre_cliente", "Sin nombre"),
+                "rnc_cedula": cliente_info.get("rnc_cedula", "—"),
+                "monto_inicial": c.get("monto_inicial"),
+                "saldo_pendiente": c.get("saldo_pendiente"),
+                "fecha_vencimiento": c.get("fecha_vencimiento"),
+                "estado": c.get("estado", "Pendiente")
+            })
+
+        return {"estado": "Exito", "datos": datos_listos}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CuentaCobrarEstado(BaseModel):
+    estado: str
+    saldo_pendiente: Optional[float] = None
+
+@app.patch("/api/v1/cuentas-cobrar/{id}/estado")
+def actualizar_estado_cuenta(id: str, datos: CuentaCobrarEstado):
+    try:
+        estados_validos = ["Pendiente", "Pagado", "Atrasado", "Anulado"]
+        if datos.estado not in estados_validos:
+            raise HTTPException(status_code=400, detail=f"Estado inválido. Debe ser uno de: {estados_validos}")
+
+        campos = {"estado": datos.estado}
+        if datos.saldo_pendiente is not None:
+            campos["saldo_pendiente"] = datos.saldo_pendiente
+
+        respuesta = supabase.table("cuentas_cobrar").update(campos).eq("id", id).execute()
+        if not respuesta.data:
+            raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+        return {"estado": "Exito", "datos": respuesta.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # --- ENDPOINTS DE CLIENTES ---
 
 @app.get("/api/v1/clientes")
