@@ -410,6 +410,74 @@ def actualizar_estado_cuenta(id: str, datos: CuentaCobrarEstado):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# Abonos de Cuentas por Cobrar
+
+@app.get("/api/v1/cuentas-cobrar/{cuenta_id}/abonos")
+def obtener_abonos(cuenta_id: str):
+    try:
+        respuesta = supabase.table("abonos_cxc").select("*").eq("cuenta_cobrar_id", cuenta_id).order("creado_en", desc=True).execute()
+        return {"estado": "Exito", "datos": respuesta.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class AbonoCreate(BaseModel):
+    monto_abonado: float
+    metodo_pago: str = "Efectivo"
+    referencia: Optional[str] = None
+    notas: Optional[str] = None
+
+@app.post("/api/v1/cuentas-cobrar/{cuenta_id}/abonos")
+def registrar_abono(cuenta_id: str, abono: AbonoCreate):
+    try:
+        # Obtener la cuenta actual
+        cuenta_resp = supabase.table("cuentas_cobrar").select("saldo_pendiente, estado").eq("id", cuenta_id).execute()
+        if not cuenta_resp.data:
+            raise HTTPException(status_code=404, detail="Cuenta no encontrada")
+        cuenta = cuenta_resp.data[0]
+
+        if cuenta.get("estado") in ["Pagado", "Anulado"]:
+            raise HTTPException(status_code=400, detail="No se pueden registrar abonos en una cuenta cerrada o anulada.")
+
+        saldo_actual = float(cuenta.get("saldo_pendiente", 0))
+
+        if abono.monto_abonado <= 0:
+            raise HTTPException(status_code=400, detail="El monto del abono debe ser mayor a 0.")
+        if abono.monto_abonado > saldo_actual:
+            raise HTTPException(status_code=400, detail=f"El abono ({abono.monto_abonado}) supera el saldo pendiente ({saldo_actual}).")
+
+        # Insertar abono en abonos_cxc
+        nuevo_abono = {
+            "cuenta_cobrar_id": cuenta_id,
+            "monto_abonado": abono.monto_abonado,
+            "metodo_pago": abono.metodo_pago,
+            "referencia": abono.referencia,
+            "notas": abono.notas
+        }
+        supabase.table("abonos_cxc").insert(nuevo_abono).execute()
+
+        # Actualizar saldo y estado en cuentas_cobrar
+        nuevo_saldo = round(saldo_actual - abono.monto_abonado, 2)
+        nuevo_estado = "Pagado" if nuevo_saldo <= 0 else cuenta.get("estado", "Pendiente")
+
+        cuenta_actualizada = supabase.table("cuentas_cobrar").update({
+            "saldo_pendiente": nuevo_saldo,
+            "estado": nuevo_estado
+        }).eq("id", cuenta_id).execute()
+
+        return {
+            "estado": "Exito",
+            "mensaje": "Abono registrado." + (" Cuenta saldada." if nuevo_estado == "Pagado" else ""),
+            "cuenta_actualizada": {
+                "id": cuenta_id,
+                "saldo_pendiente": nuevo_saldo,
+                "estado": nuevo_estado
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # --- ENDPOINTS DE CLIENTES ---
 
 @app.get("/api/v1/clientes")
