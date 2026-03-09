@@ -406,12 +406,12 @@ def exportar_ingresos_pdf(
                 .total-row td { font-weight: bold; background: #eee !important; border-top: 2px solid #333; }
                 .badge-contado { color: #155724; }
                 .badge-credito { color: #856404; }
-                col.fecha    { width: 8%; }
+                col.fecha    { width: 5%; }
                 col.ncf      { width: 12%; }
-                col.cliente  { width: 38%; }
+                col.cliente  { width: 49%; }
                 col.rnc      { width: 13%; }
-                col.tipo     { width: 7%; }
-                col.metodo   { width: 9%; }
+                col.tipo     { width: 4%; }
+                col.metodo   { width: 4%; }
                 col.total    { width: 13%; }
             </style>
         </head>
