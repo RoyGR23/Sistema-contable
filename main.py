@@ -390,27 +390,28 @@ def exportar_ingresos_pdf(
             <meta charset="UTF-8">
             <title>Reporte de Ingresos</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 15px; color: #222; font-size: 10px; }
-                h1 { font-size: 16px; margin: 0 0 3px 0; }
-                .sub { font-size: 9px; color: #555; margin-bottom: 8px; }
-                .filtros { font-size: 9px; margin-bottom: 10px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; }
+                body { font-family: Arial, sans-serif; margin: 15px; color: #222; font-size: 9.5px; }
+                h1 { font-size: 15px; margin: 0 0 3px 0; }
+                .sub { font-size: 8.5px; color: #555; margin-bottom: 8px; }
+                .filtros { font-size: 8.5px; margin-bottom: 10px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; }
                 .resumen { font-size: 10px; margin-bottom: 10px; }
                 .resumen span { font-weight: bold; }
                 table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
-                th { background: #333; color: #fff; padding: 5px 6px; text-align: left; font-size: 9px; white-space: nowrap; overflow: hidden; }
-                td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 9px; white-space: nowrap; overflow: hidden; }
+                th { background: #333; color: #fff; padding: 5px 4px; text-align: center; font-size: 8.5px; overflow: hidden; }
+                td { padding: 4px 4px; border-bottom: 1px solid #e0e0e0; font-size: 8.5px; text-align: center; overflow: hidden; white-space: nowrap; }
                 tr:nth-child(even) td { background: #f7f7f7; }
                 .right { text-align: right; }
+                .left  { text-align: left; }
                 .total-row td { font-weight: bold; background: #eee !important; border-top: 2px solid #333; }
                 .badge-contado { color: #155724; }
                 .badge-credito { color: #856404; }
-                col.fecha    { width: 10%; }
-                col.ncf      { width: 14%; }
-                col.cliente  { width: 18%; }
-                col.rnc      { width: 13%; }
-                col.tipo     { width: 9%; }
-                col.metodo   { width: 14%; }
-                col.total    { width: 12%; }
+                col.fecha    { width: 9%; }
+                col.ncf      { width: 13%; }
+                col.cliente  { width: 24%; }
+                col.rnc      { width: 14%; }
+                col.tipo     { width: 7%; }
+                col.metodo   { width: 10%; }
+                col.total    { width: 13%; }
             </style>
         </head>
         <body>
@@ -441,7 +442,7 @@ def exportar_ingresos_pdf(
                     <tr>
                         <td>{{ r.fecha_fmt }}</td>
                         <td>{{ r.ncf }}</td>
-                        <td>{{ r.nombre_cliente }}</td>
+                        <td class="left">{{ r.nombre_cliente }}</td>
                         <td>{{ r.rnc_cliente }}</td>
                         <td class="{{ 'badge-credito' if r.tipo_venta == 'Crédito' else 'badge-contado' }}">{{ r.tipo_venta }}</td>
                         <td>{{ r.metodo_pago }}</td>
