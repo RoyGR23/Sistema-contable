@@ -398,19 +398,20 @@ def exportar_ingresos_pdf(
                 .resumen span { font-weight: bold; }
                 table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
                 th { background: #333; color: #fff; padding: 5px 4px; text-align: center; font-size: 8.5px; overflow: hidden; }
-                td { padding: 4px 4px; border-bottom: 1px solid #e0e0e0; font-size: 8.5px; text-align: center; overflow: hidden; white-space: nowrap; }
+                td { padding: 4px 4px; border-bottom: 1px solid #e0e0e0; font-size: 8.5px; text-align: center; overflow: hidden; white-space: nowrap; vertical-align: middle; }
                 tr:nth-child(even) td { background: #f7f7f7; }
                 .right { text-align: right; }
                 .left  { text-align: left; }
+                .wrap  { white-space: normal; word-wrap: break-word; }
                 .total-row td { font-weight: bold; background: #eee !important; border-top: 2px solid #333; }
                 .badge-contado { color: #155724; }
                 .badge-credito { color: #856404; }
-                col.fecha    { width: 9%; }
-                col.ncf      { width: 13%; }
-                col.cliente  { width: 24%; }
-                col.rnc      { width: 14%; }
+                col.fecha    { width: 8%; }
+                col.ncf      { width: 12%; }
+                col.cliente  { width: 38%; }
+                col.rnc      { width: 13%; }
                 col.tipo     { width: 7%; }
-                col.metodo   { width: 10%; }
+                col.metodo   { width: 9%; }
                 col.total    { width: 13%; }
             </style>
         </head>
@@ -442,7 +443,7 @@ def exportar_ingresos_pdf(
                     <tr>
                         <td>{{ r.fecha_fmt }}</td>
                         <td>{{ r.ncf }}</td>
-                        <td class="left">{{ r.nombre_cliente }}</td>
+                        <td class="left wrap">{{ r.nombre_cliente }}</td>
                         <td>{{ r.rnc_cliente }}</td>
                         <td class="{{ 'badge-credito' if r.tipo_venta == 'Crédito' else 'badge-contado' }}">{{ r.tipo_venta }}</td>
                         <td>{{ r.metodo_pago }}</td>
