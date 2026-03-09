@@ -397,8 +397,8 @@ def exportar_ingresos_pdf(
                 .resumen { font-size: 10px; margin-bottom: 10px; }
                 .resumen span { font-weight: bold; }
                 table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
-                th { background: #333; color: #fff; padding: 5px 4px; text-align: center; font-size: 8.5px; overflow: hidden; }
-                td { padding: 4px 4px; border-bottom: 1px solid #e0e0e0; font-size: 8.5px; text-align: center; overflow: hidden; white-space: nowrap; vertical-align: middle; }
+                th { background: #333; color: #fff; padding: 5px 2px; text-align: center; font-size: 8.5px; overflow: hidden; }
+                td { padding: 3px 2px; border-bottom: 1px solid #e0e0e0; font-size: 8.5px; text-align: center; overflow: hidden; white-space: nowrap; vertical-align: middle; }
                 tr:nth-child(even) td { background: #f7f7f7; }
                 .right { text-align: right; }
                 .left  { text-align: left; }
