@@ -343,9 +343,14 @@ def exportar_ingresos_pdf(
             es_credito = f.get("es_credito")
             tipo = "Crédito" if es_credito else "Contado"
             fecha_str = (f.get("fecha_emision") or "")[:10]
+            try:
+                fecha_fmt = datetime.strptime(fecha_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                fecha_fmt = fecha_str
 
             registros.append({
                 "fecha": fecha_str,
+                "fecha_fmt": fecha_fmt,
                 "ncf": f.get("ncf") or "—",
                 "nombre_cliente": nombre_cliente,
                 "rnc_cliente": rnc_cedula,
@@ -391,37 +396,50 @@ def exportar_ingresos_pdf(
                 .filtros { font-size: 9px; margin-bottom: 10px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; }
                 .resumen { font-size: 10px; margin-bottom: 10px; }
                 .resumen span { font-weight: bold; }
-                table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-                th { background: #333; color: #fff; padding: 5px 6px; text-align: left; font-size: 9px; }
-                td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 9px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }
+                th { background: #333; color: #fff; padding: 5px 6px; text-align: left; font-size: 9px; white-space: nowrap; overflow: hidden; }
+                td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 9px; white-space: nowrap; overflow: hidden; }
                 tr:nth-child(even) td { background: #f7f7f7; }
-                .right { text-align: right; white-space: nowrap; }
+                .right { text-align: right; }
                 .total-row td { font-weight: bold; background: #eee !important; border-top: 2px solid #333; }
                 .badge-contado { color: #155724; }
                 .badge-credito { color: #856404; }
+                col.fecha    { width: 10%; }
+                col.ncf      { width: 14%; }
+                col.cliente  { width: 18%; }
+                col.rnc      { width: 13%; }
+                col.tipo     { width: 9%; }
+                col.metodo   { width: 14%; }
+                col.total    { width: 12%; }
             </style>
         </head>
         <body>
-            <h1>Reporte de Ingresos — DVestilo</h1>
+            <h1>Reporte de Ingresos &mdash; DVvestilo</h1>
             <div class="sub">Generado: {{ fecha_gen }} &nbsp;|&nbsp; Total de registros: {{ total_reg }}</div>
-            <div class="filtros"><strong>Filtros:</strong> {{ filtros_text }}</div>
+            {% if filtros_text != "Ninguno" %}
+            <div class="filtros">{{ filtros_text }}</div>
+            {% endif %}
             <div class="resumen">Total General: <span>RD$ {{ "{:,.2f}".format(total_general) }}</span></div>
             <table>
+                <colgroup>
+                    <col class="fecha"><col class="ncf"><col class="cliente">
+                    <col class="rnc"><col class="tipo"><col class="metodo"><col class="total">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Fecha</th>
                         <th>NCF</th>
                         <th>Cliente</th>
-                        <th>RNC/Cédula</th>
+                        <th>RNC/C&eacute;dula</th>
                         <th>Tipo</th>
-                        <th>Método</th>
+                        <th>M&eacute;todo de Pago</th>
                         <th class="right">Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in registros %}
                     <tr>
-                        <td>{{ r.fecha }}</td>
+                        <td>{{ r.fecha_fmt }}</td>
                         <td>{{ r.ncf }}</td>
                         <td>{{ r.nombre_cliente }}</td>
                         <td>{{ r.rnc_cliente }}</td>
