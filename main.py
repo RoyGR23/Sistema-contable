@@ -321,6 +321,149 @@ def obtener_ingresos():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al cargar ingresos: {str(e)}")
 
+@app.get("/api/v1/ingresos/exportar-pdf")
+def exportar_ingresos_pdf(
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None,
+    tipo_venta: Optional[str] = None,
+    metodo_pago: Optional[str] = None,
+    cliente: Optional[str] = None,
+    monto_min: Optional[float] = None,
+    monto_max: Optional[float] = None
+):
+    try:
+        respuesta = supabase.table("facturas").select("*, clientes(nombre_cliente, rnc_cedula)").order("fecha_emision", desc=True).execute()
+
+        registros = []
+        for f in (respuesta.data or []):
+            cliente_info = f.get("clientes") or {}
+            nombre_factura = f.get("nombre_cliente")
+            nombre_cliente = nombre_factura or cliente_info.get("nombre_cliente") or "No especificado"
+            rnc_cedula = f.get("rnc_cliente") or cliente_info.get("rnc_cedula") or "—"
+            es_credito = f.get("es_credito")
+            tipo = "Crédito" if es_credito else "Contado"
+            fecha_str = (f.get("fecha_emision") or "")[:10]
+
+            registros.append({
+                "fecha": fecha_str,
+                "ncf": f.get("ncf") or "—",
+                "nombre_cliente": nombre_cliente,
+                "rnc_cliente": rnc_cedula,
+                "tipo_venta": tipo,
+                "metodo_pago": f.get("metodo_pago") or "—",
+                "total_pagar": float(f.get("total_pagar") or 0)
+            })
+
+        # Filtrar
+        filtrados = []
+        for r in registros:
+            if tipo_venta and tipo_venta != "Todos" and r["tipo_venta"] != tipo_venta: continue
+            if metodo_pago and metodo_pago != "Todos" and r["metodo_pago"] != metodo_pago: continue
+            if cliente and cliente.lower() not in r["nombre_cliente"].lower(): continue
+            if fecha_desde and r["fecha"] and r["fecha"] < fecha_desde: continue
+            if fecha_hasta and r["fecha"] and r["fecha"] > fecha_hasta: continue
+            if monto_min is not None and r["total_pagar"] < monto_min: continue
+            if monto_max is not None and r["total_pagar"] > monto_max: continue
+            filtrados.append(r)
+
+        total_general = sum(r["total_pagar"] for r in filtrados)
+
+        filtros_aplicados = []
+        if tipo_venta and tipo_venta != "Todos": filtros_aplicados.append(f"Tipo: {tipo_venta}")
+        if metodo_pago and metodo_pago != "Todos": filtros_aplicados.append(f"Método: {metodo_pago}")
+        if cliente: filtros_aplicados.append(f"Cliente: {cliente}")
+        if fecha_desde: filtros_aplicados.append(f"Desde: {fecha_desde}")
+        if fecha_hasta: filtros_aplicados.append(f"Hasta: {fecha_hasta}")
+        if monto_min is not None: filtros_aplicados.append(f"Min: RD$ {monto_min:,.2f}")
+        if monto_max is not None: filtros_aplicados.append(f"Máx: RD$ {monto_max:,.2f}")
+        filtros_text = " | ".join(filtros_aplicados) if filtros_aplicados else "Ninguno"
+
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Reporte de Ingresos</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 15px; color: #222; font-size: 10px; }
+                h1 { font-size: 16px; margin: 0 0 3px 0; }
+                .sub { font-size: 9px; color: #555; margin-bottom: 8px; }
+                .filtros { font-size: 9px; margin-bottom: 10px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; }
+                .resumen { font-size: 10px; margin-bottom: 10px; }
+                .resumen span { font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+                th { background: #333; color: #fff; padding: 5px 6px; text-align: left; font-size: 9px; }
+                td { padding: 4px 6px; border-bottom: 1px solid #e0e0e0; font-size: 9px; }
+                tr:nth-child(even) td { background: #f7f7f7; }
+                .right { text-align: right; white-space: nowrap; }
+                .total-row td { font-weight: bold; background: #eee !important; border-top: 2px solid #333; }
+                .badge-contado { color: #155724; }
+                .badge-credito { color: #856404; }
+            </style>
+        </head>
+        <body>
+            <h1>Reporte de Ingresos — DVestilo</h1>
+            <div class="sub">Generado: {{ fecha_gen }} &nbsp;|&nbsp; Total de registros: {{ total_reg }}</div>
+            <div class="filtros"><strong>Filtros:</strong> {{ filtros_text }}</div>
+            <div class="resumen">Total General: <span>RD$ {{ "{:,.2f}".format(total_general) }}</span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>NCF</th>
+                        <th>Cliente</th>
+                        <th>RNC/Cédula</th>
+                        <th>Tipo</th>
+                        <th>Método</th>
+                        <th class="right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in registros %}
+                    <tr>
+                        <td>{{ r.fecha }}</td>
+                        <td>{{ r.ncf }}</td>
+                        <td>{{ r.nombre_cliente }}</td>
+                        <td>{{ r.rnc_cliente }}</td>
+                        <td class="{{ 'badge-credito' if r.tipo_venta == 'Crédito' else 'badge-contado' }}">{{ r.tipo_venta }}</td>
+                        <td>{{ r.metodo_pago }}</td>
+                        <td class="right">RD$ {{ "{:,.2f}".format(r.total_pagar) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td colspan="6" class="right">TOTAL:</td>
+                        <td class="right">RD$ {{ "{:,.2f}".format(total_general) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </body>
+        </html>
+        """
+
+        template = Template(html_template)
+        html_content = template.render(
+            registros=filtrados,
+            total_general=total_general,
+            total_reg=len(filtrados),
+            fecha_gen=datetime.now().strftime("%d/%m/%Y %I:%M %p"),
+            filtros_text=filtros_text
+        )
+
+        pdf_buffer = io.BytesIO()
+        pisa_status = pisa.CreatePDF(html_content, dest=pdf_buffer)
+        if pisa_status.err:
+            raise HTTPException(status_code=500, detail="Error al generar el PDF")
+
+        return Response(
+            content=pdf_buffer.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=reporte_ingresos.pdf"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/dashboard/ventas-mes")
 def obtener_ventas_mes():
     try:
